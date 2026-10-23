@@ -2,7 +2,7 @@ import type { Account, Accounts } from './accounts.ts'
 import { object, positive, text } from './json.ts'
 import { LoginRequiredError, OAuthClient } from './oauth.ts'
 import { signRequest } from './signing.ts'
-import type { ClaimResult, CodeArtsModel, CreditAmount, Subscription } from './types.ts'
+import { FALLBACK_REASONING, REASONING_EFFORTS, type ClaimResult, type CodeArtsModel, type CreditAmount, type Subscription } from './types.ts'
 
 export const SNAP_BASE = 'https://snap-access.cn-north-4.myhuaweicloud.com'
 export const CHAT_URL = `${SNAP_BASE}/api/v2/chat/completions`
@@ -168,7 +168,28 @@ export class CodeArtsClient {
           return { ...supplement, ...row, model_parameters: { ...supplement, ...object(row?.['model_parameters']) }, credit: row?.['credit'] ?? object(row?.['model_parameters'])?.['credit'] ?? supplement?.['credit'] }
         }))
         issues.push(...parsed.issues)
-        if (parsed.models.length) return { models: parsed.models, issues }
+        if (parsed.models.length) {
+          let variants: Record<string, unknown> = {}
+          try {
+            const data = await this.json(account, 'POST', `${SNAP_BASE}/v1/model/thinking-variants`, { ...headers, 'agent-type': 'PromptCenter' }, signal, { model_names: parsed.models.map(model => model.upstreamId) })
+            const rows = object(data['variants'])
+            if (!rows) throw new CodeArtsError('CodeArts thinking variants are missing')
+            variants = Object.fromEntries(Object.entries(rows).map(([id, value]) => [id.toLowerCase(), value]))
+          } catch (error) {
+            if (signal?.aborted) throw error
+            issues.push('Thinking effort metadata could not be refreshed; using fallback levels')
+          }
+          for (const model of parsed.models) {
+            const variant = object(variants[model.upstreamId.toLowerCase()])
+            const declared = variant?.['strengths']
+            if (!Array.isArray(declared)) { model.reasoning = FALLBACK_REASONING; continue }
+            const strengths = REASONING_EFFORTS.filter(effort => declared.includes(effort))
+            const defaultStrength = text(variant?.['default_strength'])
+            // An explicit empty list disables the selector; only missing definitions use fallback levels.
+            model.reasoning = { strengths, ...(defaultStrength && strengths.some(effort => effort === defaultStrength) ? { default_strength: defaultStrength } : {}) }
+          }
+          return { models: parsed.models, issues }
+        }
       } catch (error) {
         if (signal?.aborted) throw error
         lastError = error

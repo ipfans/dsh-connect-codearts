@@ -1,11 +1,11 @@
 import { createProvider, type Api, type Model, type ProviderStreams } from '@earendil-works/pi-ai'
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
-import { LlmAdapter, QUOTA_EXCEEDED_CODE, resolveRetryPolicy, type GenerateOptions, type LlmFailure, type PreparedAdapterCall, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, LlmError, QUOTA_EXCEEDED_CODE, ReasoningEffortId, resolveRetryPolicy, type GenerateOptions, type LlmFailure, type LlmResolvedModelInfo, type PreparedAdapterCall, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter, type PiAiAdapterOptions, type ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { ModelSnapshot } from './runtime.ts'
 import { createChatFetch } from './stream.ts'
-import { PROVIDER_ID } from './types.ts'
+import { FALLBACK_REASONING, PROVIDER_ID, REASONING_EFFORTS } from './types.ts'
 import { CodeArtsClient, SNAP_BASE, type FailureObserver } from './upstream.ts'
 
 interface AdapterOptions {
@@ -22,10 +22,11 @@ function piAdapter(snapshot: ModelSnapshot, options: AdapterOptions, onFailure: 
   const models: Model<Api>[] = snapshot.models.map(info => ({
     id: info.id, name: `${info.name} · CodeArts`,
     api: 'openai-completions', provider: PROVIDER_ID, baseUrl: `${SNAP_BASE}/api/v2`,
-    input: info.supportsImages ? ['text', 'image'] : ['text'], reasoning: false,
+    input: info.supportsImages ? ['text', 'image'] : ['text'], reasoning: (info.reasoning ?? FALLBACK_REASONING).strengths.length > 0,
+    thinkingLevelMap: Object.fromEntries(REASONING_EFFORTS.map(effort => [effort === 'none' ? 'off' : effort, (info.reasoning ?? FALLBACK_REASONING).strengths.includes(effort) ? effort : null])),
     contextWindow: info.contextWindow, maxTokens: info.maxTokens,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    compat: { maxTokensField: 'max_tokens', supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false },
+    compat: { maxTokensField: 'max_tokens', supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: true },
   }))
   const account = snapshot.account
   const fetcher = account === undefined ? async () => { throw new Error('No CodeArts account is selected') } : createChatFetch(options.client, { ...account }, snapshot.models, onFailure)
@@ -77,32 +78,49 @@ class CodeArtsAdapter extends LlmAdapter {
 
   private call() {
     let failure: LlmFailure | undefined
+    const snapshot = this.options.snapshot()
     // Each call owns its observer so simultaneous accounts cannot exchange error facts.
-    const adapter = piAdapter(this.options.snapshot(), this.options, (error, retryAfter) => {
+    const adapter = piAdapter(snapshot, this.options, (error, retryAfter) => {
       const delay = retryAfter == null ? NaN : /^\d+(?:\.\d+)?$/u.test(retryAfter.trim()) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()
       failure = { message: error.message, code: error.code === 'stream_truncated' ? 'TRANSPORT' : failureCode(error.status), status: error.status, ...(Number.isFinite(delay) && delay > 0 ? { providerRetryAfterMs: delay } : {}) }
     })
-    async function* wrap(source: AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk> {
-      for await (const chunk of source) {
+    const variant = (id: string) => snapshot.models.find(model => model.id === id)?.reasoning ?? FALLBACK_REASONING
+    function describe(model: LlmResolvedModelInfo): LlmResolvedModelInfo {
+      if (!model.reasoning) return model
+      const defaultStrength = variant(model.id).default_strength
+      return { ...model, reasoning: {
+        efforts: model.reasoning.efforts.map(effort => effort.id === 'off' ? { id: ReasoningEffortId('none'), name: 'None' } : effort),
+        ...(defaultStrength ? { defaultEffort: ReasoningEffortId(defaultStrength) } : {}),
+      } }
+    }
+    async function* wrap(options: GenerateOptions, stream: (options: GenerateOptions) => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk> {
+      const { strengths, default_strength } = variant(options.model)
+      const effort = options.reasoningEffort ?? default_strength
+      if (effort !== undefined && !strengths.includes(effort)) throw new LlmError(`CodeArts model "${options.model}" does not support reasoning effort "${effort}"`, 'UNSUPPORTED_REASONING_EFFORT')
+      const normalized = effort === undefined ? options : { ...options, reasoningEffort: ReasoningEffortId(effort === 'none' ? 'off' : effort) }
+      for await (const chunk of stream(normalized)) {
         if (chunk.type === 'finish' && chunk.reason.kind === 'error' && failure) {
           yield { ...chunk, reason: { kind: 'error', failure } }
         } else yield chunk
       }
     }
-    return { adapter, wrap }
+    return { adapter, wrap, describe }
   }
 
   override listModels(provider: string) { return this.call().adapter.listModels(provider) }
-  override resolveModel(provider: string, model: string, signal?: AbortSignal) { return this.call().adapter.resolveModel(provider, model, signal) }
+  override async resolveModel(provider: string, model: string, signal?: AbortSignal) {
+    const { adapter, describe } = this.call()
+    return describe(await adapter.resolveModel(provider, model, signal))
+  }
   override imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef) { return this.call().adapter.imageRequestTarget(provider, model, image) }
   override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
-    const { adapter, wrap } = this.call()
+    const { adapter, wrap, describe } = this.call()
     const prepared = await adapter.prepareCall(provider, model, signal)
-    return { model: prepared.model, stream: options => wrap(prepared.stream(options)) }
+    return { model: describe(prepared.model), stream: options => wrap(options, prepared.stream) }
   }
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const { adapter, wrap } = this.call()
-    return wrap(adapter.stream(options))
+    return wrap(options, options => adapter.stream(options))
   }
 }
 

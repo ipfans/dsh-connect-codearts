@@ -3,6 +3,10 @@ export const ENTRY_ID = 'llm-codearts'
 export const STATUS_PATH = '/api/codearts/status'
 export const ACTION_PATH = '/api/codearts/action'
 
+export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+export interface ReasoningVariant { strengths: string[]; default_strength?: string }
+export const FALLBACK_REASONING: ReasoningVariant = { strengths: ['none', 'low', 'high', 'max'], default_strength: 'none' }
+
 export interface CodeArtsModel {
   id: string
   upstreamId: string
@@ -11,6 +15,7 @@ export interface CodeArtsModel {
   maxTokens: number
   supportsImages: boolean
   creditRates?: number[]
+  reasoning?: ReasoningVariant
 }
 
 export interface CatalogState {
