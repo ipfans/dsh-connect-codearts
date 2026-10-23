@@ -142,7 +142,7 @@ export async function normalizeResponse(response: Response, model: CodeArtsModel
 
 export function createChatFetch(client: CodeArtsClient, account: Account, models: readonly CodeArtsModel[], onFailure?: FailureObserver): typeof fetch {
   // Huawei limits active session IDs per account, including completed requests.
-  const sessionId = `ses_${createHash('sha256').update(account.ak).digest('hex').slice(0, 32)}`
+  const sessionId = `ses_${createHash('sha256').update(JSON.stringify([account.oauth?.domainId, account.oauth?.userId])).digest('hex').slice(0, 32)}`
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.href !== CHAT_URL || init?.method?.toUpperCase() !== 'POST' || typeof init.body !== 'string') throw new CodeArtsError('Unsupported CodeArts chat request', 400)
@@ -153,8 +153,9 @@ export function createChatFetch(client: CodeArtsClient, account: Account, models
     payload['stream'] = true
     const extra = { ...attributionHeaders(), 'x-ot-session-id': sessionId, 'user-session-id': sessionId }
     try {
-      const response = await client.request(account, 'POST', CHAT_URL, encoder.encode(JSON.stringify(payload)), extra, init.signal ?? undefined, 600_000)
-      return await normalizeResponse(response, model, account, onFailure)
+      const current = await client.authorize(account)
+      const response = await client.request(current, 'POST', CHAT_URL, encoder.encode(JSON.stringify(payload)), extra, init.signal ?? undefined, 600_000)
+      return await normalizeResponse(response, model, current, onFailure)
     } catch (error) {
       if (error instanceof CodeArtsError) onFailure?.(error)
       throw error

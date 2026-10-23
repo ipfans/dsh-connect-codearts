@@ -19,3 +19,21 @@ response compatibility behavior are informed by:
 
 Dependencies retain their own licenses. This plugin is an independent community
 project and is not affiliated with Huawei Cloud or DeepSeek.
+
+The OAuth PKCE/DPoP protocol, renewable credentials and credit campaign
+claim/confirmation behavior are informed by:
+  codearts2api
+  https://github.com/HITZY2002/codearts2api
+  Reference commit: 8d1e43d6f31279ac20cf94b92eff20bdba784b76
+  Copyright (c) 2026 HITZY2002
+  MIT License (included in LICENSE)
+
+Credit statistics endpoint and metric names were cross-checked against:
+  Coding2API
+  https://github.com/RobbsLuo/Coding2API
+  src/provider/codearts/client.py (accessed 2026-10-23)
+  Copyright (c) 2026 Hongsheng Luo (Robbs)
+  MIT License (included in LICENSE)
+
+Subscription and model credit metadata were also verified against the installed
+Huawei CodeArts Agent 26.10.0 client. No proprietary client code is bundled.

@@ -103,7 +103,7 @@ describe('provider-scoped signed fetch', () => {
     })
     const request = { method: 'POST', body: JSON.stringify({ model: model.id }) }
     await (await createChatFetch(client, accountA, [model])(CHAT_URL, request)).text()
-    await (await createChatFetch(client, { ...accountA }, [model])(CHAT_URL, request)).text()
+    await (await createChatFetch(client, { ...accountA, ak: 'rotated-access-key', sk: 'rotated-secret-key', oauth: { ...accountA.oauth, securityToken: 'rotated-security-token' } }, [model])(CHAT_URL, request)).text()
     await (await createChatFetch(client, accountB, [model])(CHAT_URL, request)).text()
     for (const headers of sent) {
       const session = headers.get('x-ot-session-id')
@@ -113,6 +113,8 @@ describe('provider-scoped signed fetch', () => {
       expect(headers.get('authorization')).toContain('user-session-id;x-ot-session-id')
     }
     expect(sent[0]!.get('x-ot-session-id')).toBe(sent[1]!.get('x-ot-session-id'))
+    expect(sent[1]!.get('authorization')).toContain('rotated-access-key')
+    expect(sent[1]!.get('x-security-token')).toBe('rotated-security-token')
     expect(sent[0]!.get('x-ot-session-id')).not.toBe(sent[2]!.get('x-ot-session-id'))
   })
 

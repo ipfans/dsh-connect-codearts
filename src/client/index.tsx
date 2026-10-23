@@ -37,6 +37,9 @@ const CSS = `
 .cac-form { display: grid; gap: 10px; max-width: 480px; padding: 16px 0; }
 .cac-form label { font-size: 13px; }
 .cac-model-id { overflow-wrap: anywhere; } .cac-provider { padding: 12px; }
+.cac-credits { display: flex; flex-wrap: wrap; gap: 24px; } .cac-credits dt { color: var(--dsw-alias-label-secondary); font-size: 13px; } .cac-credits dd { margin: 4px 0; font-variant-numeric: tabular-nums; }
+.cac-toggle { display: flex; align-items: center; gap: 8px; margin-top: 20px; } .cac-login { padding: 16px 0; }
+.cac-page a { color: var(--dsw-alias-label-primary); text-decoration: underline; }
 @media (max-width: 600px) { .cac-page { padding: 16px; } .cac-row { align-items: flex-start; flex-direction: column; } }
 `
 

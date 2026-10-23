@@ -13,8 +13,13 @@ describe('CodeArts upstream discovery', () => {
   it('uses primary AgentCenter metadata and sends signed routing headers', async () => {
     const client = new CodeArtsClient(async (input, init) => {
       const headers = new Headers(init?.headers)
+      expect(headers.get('x-security-token')).toBe(accountA.oauth.securityToken)
+      if (String(input).includes('/v1/model/builtin')) {
+        expect(headers.get('agent-type')).toBe('PromptCenter')
+        return Response.json({ builtinModels: [] })
+      }
       expect(headers.get('agent-type')).toBe('AgentCenter')
-      expect(headers.get('authorization')).toContain('SignedHeaders=accept;agent-type;content-type;host;x-language;x-sdk-date')
+      expect(headers.get('authorization')).toContain('SignedHeaders=accept;agent-type;content-type;host;x-language;x-sdk-date;x-security-token')
       if (String(input).includes('useragents')) return Response.json({ agents: [{ agent_id: 'secondary' }, { agent_id: 'primary', is_primary_agent: true }] })
       expect(String(input)).toContain('agent_id=primary')
       return Response.json({ gpts: { models: [{ model_id: 'vision', model_alias: 'Vision', model_parameters: { context_window: 64000, max_tokens: 8000, supports_images: true } }] } })

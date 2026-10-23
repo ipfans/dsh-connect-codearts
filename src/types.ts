@@ -10,6 +10,7 @@ export interface CodeArtsModel {
   contextWindow: number
   maxTokens: number
   supportsImages: boolean
+  creditRates?: number[]
 }
 
 export interface CatalogState {
@@ -22,7 +23,52 @@ export interface CatalogState {
 export interface PublicAccount {
   id: string
   label: string
-  akHint: string
+  authState: 'ready' | 'legacy' | 'login-required'
+  userName?: string
+  expiresAt?: number
+  benefits: BenefitsState
+}
+
+export interface CreditAmount {
+  total?: number
+  used?: number
+  remaining?: number
+  expiring?: number
+}
+
+export interface Subscription extends CreditAmount {
+  name?: string
+  nameEn?: string
+  status?: string
+  periodEnd?: string
+  isCreditPackage?: boolean
+  packages: (CreditAmount & { kind: 'basic' | 'ondemand' | 'bonus' })[]
+}
+
+export interface ClaimResult {
+  campaignId: number
+  title: string
+  status: string
+  ok: boolean
+  credits?: number
+  message: string
+}
+
+export interface BenefitsState {
+  subscription?: Subscription
+  fetchedAt?: number
+  error?: string
+  claims?: ClaimResult[]
+  checkedAt?: number
+  claimError?: string
+}
+
+export interface LoginState {
+  state: 'idle' | 'pending' | 'complete' | 'error'
+  accountId?: string
+  authUrl?: string
+  expiresAt?: number
+  error?: string
 }
 
 export interface CodeArtsStatus {
@@ -30,9 +76,14 @@ export interface CodeArtsStatus {
   activeId: string | null
   catalog: CatalogState
   actionToken: string
+  autoClaim: boolean
+  login: LoginState
 }
 
 export type AccountAction =
-  | { action: 'save'; id?: string; label: string; ak?: string; sk?: string }
+  | { action: 'rename'; id: string; label: string }
   | { action: 'select' | 'remove'; id: string }
-  | { action: 'refresh'; accountId: string }
+  | { action: 'refresh' | 'claim'; accountId: string }
+  | { action: 'login'; accountId?: string }
+  | { action: 'cancel-login' }
+  | { action: 'auto-claim'; enabled: boolean }

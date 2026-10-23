@@ -7,6 +7,8 @@ import { accountA, accountB, credentialStore, deferred, model } from './helpers.
 function clientFixture() {
   const client = new CodeArtsClient(async () => { throw new Error('Unexpected network request') })
   vi.spyOn(client, 'models').mockResolvedValue({ models: [model], issues: [] })
+  vi.spyOn(client, 'subscription').mockResolvedValue({ remaining: 10, total: 100, packages: [] })
+  vi.spyOn(client, 'claim').mockResolvedValue([])
   return client
 }
 
@@ -71,12 +73,13 @@ describe('account-scoped runtime', () => {
     runtime.close()
   })
 
-  it('invalidates an account cache when its keys change and refuses stale refresh actions', async () => {
+  it('invalidates the cache on reauthorization and refuses stale refresh actions', async () => {
     const { store } = credentialStore([accountA, accountB])
     const client = clientFixture()
     const runtime = new CodeArtsRuntime(new Accounts(store), client)
     await runtime.sync(); await runtime.refresh()
-    await runtime.action({ action: 'save', id: accountA.id, label: 'A', sk: 'new-fake-secret' })
+    await runtime.accounts.login({ ...accountA, oauth: { ...accountA.oauth, loginId: 'new-login' } }, accountA.id)
+    await runtime.sync(); await runtime.refresh()
     expect(client.models).toHaveBeenCalledTimes(2)
     await runtime.action({ action: 'select', id: accountB.id })
     await expect(runtime.action({ action: 'refresh', accountId: accountA.id })).rejects.toThrow('changed')
@@ -108,5 +111,61 @@ describe('account-scoped runtime', () => {
     expect(runtime.snapshot().models).toEqual([])
     runtime.close()
     await expect(runtime.action({ action: 'select', id: accountA.id })).rejects.toThrow('stopping')
+  })
+
+  it('automatically claims all signed-in accounts every 30 minutes and honors the saved switch', async () => {
+    const { store } = credentialStore([accountA, accountB])
+    const accounts = new Accounts(store)
+    const client = clientFixture()
+    let now = 0
+    const runtime = new CodeArtsRuntime(accounts, client, () => now)
+    await runtime.maintain()
+    expect(client.claim).toHaveBeenCalledTimes(2)
+    now = 1_799_999
+    await runtime.maintain()
+    expect(client.claim).toHaveBeenCalledTimes(2)
+    now = 1_800_000
+    await runtime.maintain()
+    expect(client.claim).toHaveBeenCalledTimes(4)
+    await runtime.action({ action: 'auto-claim', enabled: false })
+    now += 1_800_000
+    await runtime.maintain()
+    expect(client.claim).toHaveBeenCalledTimes(4)
+    await runtime.action({ action: 'claim', accountId: accountA.id })
+    expect(client.claim).toHaveBeenCalledTimes(5)
+    expect((await runtime.status('token')).autoClaim).toBe(false)
+    runtime.close()
+  })
+
+  it('coalesces manual and automatic claims and preserves balances on failures', async () => {
+    const { store } = credentialStore([accountA])
+    const client = clientFixture()
+    const runtime = new CodeArtsRuntime(new Accounts(store), client)
+    await runtime.maintain()
+    expect((await runtime.status('token')).accounts[0]?.benefits.subscription?.remaining).toBe(10)
+    const pending = deferred<[]>()
+    vi.mocked(client.claim).mockImplementation(() => pending.promise)
+    vi.mocked(client.subscription).mockRejectedValue(new Error(`offline ${accountA.oauth.securityToken}`))
+    const first = runtime.action({ action: 'claim', accountId: accountA.id })
+    const second = runtime.action({ action: 'claim', accountId: accountA.id })
+    await vi.waitFor(() => expect(client.claim).toHaveBeenCalledTimes(2))
+    pending.reject(new Error(`claim failed ${accountA.oauth.refreshToken}`))
+    await Promise.all([first, second])
+    const status = await runtime.status('token')
+    expect(status.accounts[0]?.benefits).toMatchObject({ subscription: { remaining: 10 }, error: 'offline [redacted]', claimError: 'claim failed [redacted]' })
+    expect(status.catalog.models).toHaveLength(1)
+    runtime.close()
+  })
+
+  it('keeps the catalog when only temporary credentials rotate', async () => {
+    const { store } = credentialStore([accountA])
+    const client = clientFixture()
+    const runtime = new CodeArtsRuntime(new Accounts(store), client)
+    await runtime.sync(); await runtime.refresh()
+    await runtime.accounts.login({ ...accountA, ak: 'rotated-ak', sk: 'rotated-sk' }, accountA.id)
+    await runtime.sync(); await runtime.refresh()
+    expect(client.models).toHaveBeenCalledTimes(1)
+    expect(runtime.snapshot().account?.ak).toBe('rotated-ak')
+    runtime.close()
   })
 })

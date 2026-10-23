@@ -15,7 +15,8 @@ export const inject = ['llm', 'credentials']
 export const Config = z.object({})
 
 export function apply(ctx: Context): void {
-  const runtime = new CodeArtsRuntime(new Accounts(ctx.credentials), new CodeArtsClient())
+  const accounts = new Accounts(ctx.credentials)
+  const runtime = new CodeArtsRuntime(accounts, new CodeArtsClient(globalThis.fetch, accounts))
   const adapter = createCodeArtsAdapter({
     snapshot: () => runtime.snapshot(), client: runtime.client,
     resolveAttachments: () => ctx.get('attachments'),
@@ -28,7 +29,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.llm.registerConfigurableProviders([{ provider: PROVIDER_ID, displayName: 'CodeArts', settingsNs: ENTRY_ID, settingsPath: [] }]))
   ctx.effect(() => runtime.subscribe(() => ctx.emit('llm/adapters-updated')))
   const refresh = async (): Promise<void> => {
-    try { await runtime.sync(); await runtime.refresh() }
+    try { await runtime.maintain() }
     catch { ctx.logger.warn('CodeArts account state could not be loaded; check the credential store') }
   }
   ctx.on('credentials/record-updated', key => { if (key === ACCOUNTS_KEY) void refresh() })

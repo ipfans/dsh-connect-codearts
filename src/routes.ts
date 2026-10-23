@@ -27,14 +27,17 @@ export function parseAction(value: unknown): AccountAction {
   const row = object(value)
   if (!row) throw new CodeArtsError('Invalid action', 400)
   const action = row['action']
-  if (action === 'save') {
+  if (action === 'rename') {
     const label = text(row['label'])
     if (!label || label.length > 100) throw new CodeArtsError('Account name must contain 1–100 characters', 400)
-    for (const key of ['id', 'ak', 'sk']) if (row[key] !== undefined && (typeof row[key] !== 'string' || row[key].length > 1024)) throw new CodeArtsError('Invalid account fields', 400)
-    return { action, label, ...(row['id'] === undefined ? {} : { id: String(row['id']) }), ...(row['ak'] === undefined ? {} : { ak: String(row['ak']) }), ...(row['sk'] === undefined ? {} : { sk: String(row['sk']) }) }
+    if (!text(row['id']) || String(row['id']).length > 256) throw new CodeArtsError('Invalid account ID', 400)
+    return { action, label, id: String(row['id']) }
   }
-  if ((action === 'remove' || action === 'select') && text(row['id'])) return { action, id: String(row['id']) }
-  if (action === 'refresh' && text(row['accountId'])) return { action, accountId: String(row['accountId']) }
+  if ((action === 'remove' || action === 'select') && text(row['id']) && String(row['id']).length <= 256) return { action, id: String(row['id']) }
+  if ((action === 'refresh' || action === 'claim') && text(row['accountId']) && String(row['accountId']).length <= 256) return { action, accountId: String(row['accountId']) }
+  if (action === 'login' && (row['accountId'] === undefined || (text(row['accountId']) && String(row['accountId']).length <= 256))) return { action, ...(row['accountId'] === undefined ? {} : { accountId: String(row['accountId']) }) }
+  if (action === 'cancel-login') return { action }
+  if (action === 'auto-claim' && typeof row['enabled'] === 'boolean') return { action, enabled: row['enabled'] }
   throw new CodeArtsError('Invalid action', 400)
 }
 
