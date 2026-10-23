@@ -1,0 +1,44 @@
+name: Publish to npm
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v4
+      - name: Verify release version
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+          import { readFileSync } from 'node:fs'
+          const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+          assert.equal(manifest.name, '@ipfans/dsh-connect-codearts')
+          assert.equal(process.env.GITHUB_REF, `refs/tags/v${manifest.version}`)
+          NODE
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test:engine
+      - name: Publish with npm Trusted Publishing
+        run: npm publish --access public --provenance

@@ -7,6 +7,10 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import * as plugin from '../lib/index.js'
 
+const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+assert.equal(plugin.name, manifest.name)
+assert.ok((await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')).includes(`name: '${manifest.name}'`))
+
 class Credentials extends CredentialProvider {
   async readRecord() { return undefined }
   async modifyRecord() { throw new Error('Engine check must not write credentials') }
@@ -31,7 +35,7 @@ try {
   let client
   const sandbox = { window: { __ModuleLoader__: { load({ id, factory }) { moduleId = id; client = factory(name => name === '@deepseek-ai/dsh-client-ui-primitives' ? { Button() {}, Input() {} } : require(name)) } } } }
   vm.runInNewContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'), sandbox)
-  assert.equal(moduleId, JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).name)
+  assert.equal(moduleId, manifest.name)
   assert.equal(client.name, 'dsh-connect-codearts-client')
   assert.equal(typeof client.apply, 'function')
   console.log('Engine load passed: provider, directory, routes and browser module identity.')

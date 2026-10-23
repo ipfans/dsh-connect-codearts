@@ -1,4 +1,4 @@
-# dsh-connect-codearts
+# @ipfans/dsh-connect-codearts
 
 将华为云 CodeArts 订阅模型与免费额度模型接入 DeepSeek Harness。原生 TypeScript 插件，直接签名调用 CodeArts 接口，使用 DSH 的会话、工具执行和权限体系。
 
@@ -14,16 +14,16 @@
 在 DSH 的 **设置 → 插件 → 添加插件** 中填写：
 
 ```text
-github:ipfans/dsh-connect-codearts
+@ipfans/dsh-connect-codearts
 ```
 
 也可以使用已安装的 DSH CLI：
 
 ```sh
-dsh plugin --profile desktop add github:ipfans/dsh-connect-codearts
+dsh plugin --profile desktop add @ipfans/dsh-connect-codearts
 ```
 
-Web profile 将 `desktop` 改为 `web`。安装后重启 DSH。仓库包含预构建的 `lib/`，GitHub 安装无需本地编译。
+Web profile 将 `desktop` 改为 `web`。安装后重启 DSH。也可使用 `github:ipfans/dsh-connect-codearts` 安装；仓库包含预构建的 `lib/`，无需本地编译。
 
 ## 使用
 
@@ -69,6 +69,12 @@ pnpm test:engine
 测试覆盖签名向量、双通道目录、账号持久化与隔离、工具调用往返、流式错误、取消、控制接口和设置页交互。引擎检查在离线 Cordis/DSH 环境加载构建产物，确认 provider、设置目录、控制路由和浏览器模块身份。
 
 **真实账号验收尚未完成**：本项目当前验证使用离线模拟接口，未使用真实 AK/SK 测试上游聊天、签到、实际模型工具能力，以及 DSH Desktop 的完整交互。这些能力需要部署后使用自己的账号验收。
+
+## npm 发布
+
+推送与 `package.json` 版本一致的 `v*` 标签会触发 [publish.yml](.github/workflows/publish.yml)：安装锁定依赖、构建、类型检查、测试、引擎加载检查，然后通过 GitHub Actions OIDC 发布公开 npm 包和 provenance，无需 `NPM_TOKEN`。
+
+npm Trusted Publisher 配置为 GitHub 用户 `ipfans`、仓库 `dsh-connect-codearts`、工作流文件 `publish.yml`，不设置 Environment，并允许 `npm publish`。首次配置前必须在 npm 建立包记录；见 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)。
 
 ## 参考与许可
 

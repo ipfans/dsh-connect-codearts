@@ -10,7 +10,7 @@ import { CodeArtsRuntime } from './runtime.ts'
 import { ACTION_PATH, ENTRY_ID, PROVIDER_ID, STATUS_PATH } from './types.ts'
 import { CodeArtsClient } from './upstream.ts'
 
-export const name = 'dsh-connect-codearts'
+export const name = '@ipfans/dsh-connect-codearts'
 export const inject = ['llm', 'credentials']
 export const Config = z.object({})
 

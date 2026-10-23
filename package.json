@@ -1,10 +1,11 @@
 {
-  "name": "dsh-connect-codearts",
+  "name": "@ipfans/dsh-connect-codearts",
   "displayName": "DSH CodeArts Connect",
   "version": "0.1.0",
   "description": "Connect Huawei Cloud CodeArts subscription and benefit models to DeepSeek Harness.",
   "author": "ipfans",
   "license": "MIT",
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "type": "module",
   "engines": { "node": "^22.19.0 || >=24.0.0" },
   "packageManager": "pnpm@12.14.0",
