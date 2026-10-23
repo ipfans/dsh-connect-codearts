@@ -20,7 +20,7 @@ const RETRY_POLICY = resolveRetryPolicy(undefined, 'CodeArts retry policy')
 function piAdapter(snapshot: ModelSnapshot, options: AdapterOptions, onFailure: FailureObserver): PiAiAdapter {
   const base = openAICompletionsApi()
   const models: Model<Api>[] = snapshot.models.map(info => ({
-    id: info.id, name: `${info.name} · ${info.channel === 'agent' ? 'CodeArts' : 'CodeArts Benefit'}`,
+    id: info.id, name: `${info.name} · CodeArts`,
     api: 'openai-completions', provider: PROVIDER_ID, baseUrl: `${SNAP_BASE}/api/v2`,
     input: info.supportsImages ? ['text', 'image'] : ['text'], reasoning: false,
     contextWindow: info.contextWindow, maxTokens: info.maxTokens,

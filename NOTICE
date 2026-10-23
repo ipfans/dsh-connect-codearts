@@ -9,7 +9,7 @@ settings integration are adapted from:
   Copyright (c) 2026 Corrine Hu and Functy
   MIT License (included in LICENSE)
 
-The CodeArts endpoint discovery, SDK-HMAC-SHA256 usage, benefit routing and
+The CodeArts endpoint discovery, SDK-HMAC-SHA256 usage and
 response compatibility behavior are informed by:
   codearts2api
   https://github.com/Johnsheng1/codearts2api

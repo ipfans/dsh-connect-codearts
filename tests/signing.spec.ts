@@ -19,13 +19,13 @@ describe('Huawei SDK-HMAC-SHA256 signing', () => {
     expect(first.authorization).toBe('SDK-HMAC-SHA256 Access=FAKEACCESSKEYA1234, SignedHeaders=content-type;host;x-sdk-date, Signature=44036d4a5287b43aef5fe9351db3266392f0558f876e6a597b06ca3d40b7e74c')
   })
 
-  it('includes benefit routing headers in the signature and signs the actual payload', () => {
+  it('includes session headers in the signature and signs the actual payload', () => {
     const url = new URL('https://snap-access.cn-north-4.myhuaweicloud.com/api/v2/chat/completions')
     const body = new TextEncoder().encode('{}')
     const agent = signRequest(accountA, 'POST', url, body, {}, now)
-    const benefit = signRequest(accountA, 'POST', url, body, { maas_type: 'benefit', 'Model-ID': 'fixture', 'model-name': 'fixture' }, now)
-    expect(benefit.authorization).toContain('SignedHeaders=content-type;host;maas_type;model-id;model-name;x-sdk-date')
-    expect(benefit.authorization).not.toBe(agent.authorization)
+    const session = signRequest(accountA, 'POST', url, body, { 'X-OT-Session-ID': 'ses_fixture', 'user-session-id': 'ses_fixture' }, now)
+    expect(session.authorization).toContain('SignedHeaders=content-type;host;user-session-id;x-ot-session-id;x-sdk-date')
+    expect(session.authorization).not.toBe(agent.authorization)
     expect(signRequest(accountA, 'POST', url, new TextEncoder().encode('{ }'), {}, now).authorization).not.toBe(agent.authorization)
   })
 })

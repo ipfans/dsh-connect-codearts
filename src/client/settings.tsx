@@ -45,7 +45,7 @@ export function SettingsPage({ t }: { t: Translate }) {
     try {
       await sendAction(action, status.actionToken, signal())
       if (signal()?.aborted) return false
-      setMessage(t(action.action === 'claim' ? 'claimSuccess' : 'updated'))
+      setMessage(t('updated'))
       await reload()
       return true
     } catch (reason) {
@@ -54,7 +54,6 @@ export function SettingsPage({ t }: { t: Translate }) {
     } finally { operating.current = false; if (!signal()?.aborted) setBusy(false) }
   }
   const edit = (account: PublicAccount) => { setForm({ id: account.id, label: account.label, ak: '', sk: '' }); setRemoving(null) }
-  const format = (value: number | undefined): string => value === undefined ? '—' : value.toLocaleString()
   return <div className="cac-page" aria-busy={busy}>
     <h2>{t('title')}</h2><p className="cac-muted">{t('intro')}</p>
     {error && <p role="alert" className="cac-error">{error} <Button size="sm" onClick={() => { void reload() }}>{t('retry')}</Button></p>}
@@ -87,21 +86,14 @@ export function SettingsPage({ t }: { t: Translate }) {
         </form>}
       </section>
       {!active ? <p>{t('choose')}</p> : <>
-        <section className="cac-section" aria-labelledby={`${formId}-quota`}>
-          <div className="cac-heading"><h3 id={`${formId}-quota`}>{t('quota')} · {active.label}</h3><div className="cac-actions"><Button size="sm" disabled={busy} onClick={() => { void perform({ action: 'refresh', accountId: active.id }) }}>{t('refresh')}</Button><Button size="sm" disabled={busy} onClick={() => { void perform({ action: 'claim', accountId: active.id }) }}>{t('claim')}</Button></div></div>
-          <dl className="cac-facts"><div><dt>{t('remaining')}</dt><dd>{format(status.benefit.balance)}</dd></div><div><dt>{t('total')}</dt><dd>{format(status.benefit.total)}</dd></div><div><dt>{t('used')}</dt><dd>{format(status.benefit.used)}</dd></div></dl>
-          <p className="cac-muted">{t('claimed')}: {status.benefit.claimedAt ? new Date(status.benefit.claimedAt).toLocaleString() : t('noClaim')}</p>
-          {status.benefit.error && <p role="alert" className="cac-error">{status.benefit.error}</p>}
-        </section>
-        <section className="cac-section"><h3>{t('models')}</h3><p className="cac-muted">{t('modelHint')}</p>
-          {(['agent', 'benefit'] as const).map(channel => <div key={channel}>
-            <h4>{t(channel)}</h4>
-            {status.catalog[channel].error && <p role="alert" className="cac-error">{status.catalog[channel].error}</p>}
-            {status.catalog[channel].fetchedAt !== undefined && <p className="cac-muted">{t('cached')}: {new Date(status.catalog[channel].fetchedAt!).toLocaleString()}</p>}
-            {!status.catalog[channel].models.length && <p className="cac-muted">{t('noModels')}</p>}
-            {status.catalog[channel].models.map(model => <div className="cac-row" key={model.id}><div><strong>{model.name}</strong><div className="cac-muted cac-model-id">{model.id}</div></div><span className="cac-muted">{t('context')} {format(model.contextWindow)} · {t('output')} {format(model.maxTokens)} · {t(model.supportsImages ? 'images' : 'text')}</span></div>)}
-            {status.catalog[channel].issues.map((issue, i) => <p className="cac-muted" key={i}>{issue}</p>)}
-          </div>)}
+        <section className="cac-section" aria-labelledby={`${formId}-models`}>
+          <div className="cac-heading"><h3 id={`${formId}-models`}>{t('models')} · {active.label}</h3><Button size="sm" disabled={busy} onClick={() => { void perform({ action: 'refresh', accountId: active.id }) }}>{t('refresh')}</Button></div>
+          <p className="cac-muted">{t('modelHint')}</p>
+          {status.catalog.error && <p role="alert" className="cac-error">{status.catalog.error}</p>}
+          {status.catalog.fetchedAt !== undefined && <p className="cac-muted">{t('cached')}: {new Date(status.catalog.fetchedAt).toLocaleString()}</p>}
+          {!status.catalog.models.length && <p className="cac-muted">{t('noModels')}</p>}
+          {status.catalog.models.map(model => <div className="cac-row" key={model.id}><div><strong>{model.name}</strong><div className="cac-muted cac-model-id">{model.id}</div></div><span className="cac-muted">{t('context')} {model.contextWindow.toLocaleString()} · {t('output')} {model.maxTokens.toLocaleString()} · {t(model.supportsImages ? 'images' : 'text')}</span></div>)}
+          {status.catalog.issues.map((issue, i) => <p className="cac-muted" key={i}>{issue}</p>)}
         </section>
       </>}
     </>}
@@ -111,5 +103,5 @@ export function SettingsPage({ t }: { t: Translate }) {
 export function ProviderCard({ t }: { t: Translate }) {
   const { status, error } = useStatus()
   const active = status?.accounts.find(a => a.id === status.activeId)
-  return <div className="cac-provider"><strong>CodeArts</strong><p>{active?.label ?? t('choose')}</p>{status && <p>{t('modelCount')}: {status.catalog.agent.models.length + status.catalog.benefit.models.length}</p>}<p className="cac-muted">{t('manage')}</p>{error && <p role="alert" className="cac-error">{error}</p>}</div>
+  return <div className="cac-provider"><strong>CodeArts</strong><p>{active?.label ?? t('choose')}</p>{status && <p>{t('modelCount')}: {status.catalog.models.length}</p>}<p className="cac-muted">{t('manage')}</p>{error && <p role="alert" className="cac-error">{error}</p>}</div>
 }

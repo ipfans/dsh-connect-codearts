@@ -10,6 +10,20 @@ const request: GenerateOptions = { provider: 'codearts', model: model.id, messag
 async function collect(source: AsyncIterable<StreamChunk>): Promise<StreamChunk[]> { const chunks: StreamChunk[] = []; for await (const chunk of source) chunks.push(chunk); return chunks }
 
 describe('native DSH adapter', () => {
+  it('treats the upstream TPM limit as a retryable rate limit', async () => {
+    const client = new CodeArtsClient(async () => sse([{ error_code: 'tpm_limit', error_msg: 'The model TPM limit has been significantly exceeded. Please reduce the request rate and retry later.' }]))
+    const adapter = createCodeArtsAdapter({ snapshot: () => ({ account: accountA, models: [model] }), client })
+    const chunks = await collect(adapter.stream(request))
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'error', failure: { code: 'RATE_LIMIT', status: 429 } } })
+  })
+
+  it('treats the Huawei HTTP-400 session limit as a retryable rate limit', async () => {
+    const client = new CodeArtsClient(async () => Response.json({ error_code: 'TM.00001041', error_msg: '并发会话数已达上限(3个)，请关闭部分会话后重试。' }, { status: 400 }))
+    const adapter = createCodeArtsAdapter({ snapshot: () => ({ account: accountA, models: [model] }), client })
+    const chunks = await collect(adapter.stream(request))
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'error', failure: { code: 'RATE_LIMIT', status: 429 } } })
+  })
+
   it('freezes the prepared account while new requests follow a manual switch', async () => {
     let snapshot: ModelSnapshot = { account: accountA, models: [model] }
     const sent: string[] = []

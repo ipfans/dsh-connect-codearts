@@ -9,8 +9,7 @@ vi.mock('../src/client/api.ts', () => ({ readStatus: vi.fn(), sendAction: vi.fn(
 const t: Translate = key => en[key]
 const initial: CodeArtsStatus = {
   accounts: [{ id: 'a', label: 'First', akHint: '••••1234' }, { id: 'b', label: 'Second', akHint: '••••5678' }],
-  activeId: 'a', actionToken: 'fixture-token', catalog: { agent: { models: [], issues: [] }, benefit: { models: [], issues: [] } },
-  benefit: { balance: 0, total: 100, used: 100 },
+  activeId: 'a', actionToken: 'fixture-token', catalog: { models: [], issues: [] },
 }
 let renderer: ReactTestRenderer | undefined
 afterEach(() => { if (renderer) act(() => renderer!.unmount()); renderer = undefined; vi.clearAllMocks() })
@@ -27,9 +26,9 @@ async function click(label: string, index = 0) {
 }
 
 describe('CodeArts settings page', () => {
-  it('uses the saved action token, renders zero balance and clears password fields after a successful save', async () => {
+  it('uses the saved action token and clears password fields after a successful save', async () => {
     const view = await render()
-    expect(JSON.stringify(view.toJSON())).toContain('Remaining')
+    expect(JSON.stringify(view.toJSON())).toContain(en.models)
     await click(en.add)
     const inputs = view.root.findAllByType('input')
     expect(inputs.filter(input => input.props.type === 'password')).toHaveLength(2)
@@ -56,7 +55,7 @@ describe('CodeArts settings page', () => {
     expect(sendAction).toHaveBeenCalledWith({ action: 'save', id: 'a', label: 'Renamed', ak: '', sk: '' }, 'fixture-token', expect.any(AbortSignal))
   })
 
-  it('requires the deletion confirmation and binds refresh/check-in to the displayed account', async () => {
+  it('requires the deletion confirmation and binds refresh to the displayed account', async () => {
     await render()
     await click(en.remove)
     expect(sendAction).not.toHaveBeenCalled()
@@ -65,7 +64,5 @@ describe('CodeArts settings page', () => {
     expect(sendAction).toHaveBeenCalledWith({ action: 'select', id: 'b' }, 'fixture-token', expect.any(AbortSignal))
     await click(en.refresh)
     expect(sendAction).toHaveBeenCalledWith({ action: 'refresh', accountId: 'a' }, 'fixture-token', expect.any(AbortSignal))
-    await click(en.claim)
-    expect(sendAction).toHaveBeenCalledWith({ action: 'claim', accountId: 'a' }, 'fixture-token', expect.any(AbortSignal))
   })
 })

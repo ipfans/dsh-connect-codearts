@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createChatFetch, normalizeResponse } from '../src/stream.ts'
 import { CHAT_URL, CodeArtsClient } from '../src/upstream.ts'
-import { accountA, model, sse } from './helpers.ts'
+import { accountA, accountB, model, sse } from './helpers.ts'
 
 async function chunks(response: Response) {
   const content = await response.text()
@@ -75,8 +75,8 @@ describe('CodeArts response normalization', () => {
 })
 
 describe('provider-scoped signed fetch', () => {
-  it.each(['agent', 'benefit'] as const)('sends %s headers and raw model IDs with signed final bytes and Harness attribution', async channel => {
-    const entry = { ...model, channel, id: `${channel}/fixture` }
+  it('sends raw model IDs with signed final bytes and Harness attribution', async () => {
+    const entry = model
     const client = new CodeArtsClient(async (input, init) => {
       expect(String(input)).toBe(CHAT_URL)
       const headers = new Headers(init?.headers)
@@ -87,13 +87,33 @@ describe('provider-scoped signed fetch', () => {
       expect(headers.get('authorization')).toContain(accountA.ak)
       expect(headers.get('authorization')).not.toContain('sdk-placeholder')
       expect(headers.get('user-agent')).toContain('deepseek-harness/')
-      expect(headers.get('maas_type')).toBe(channel === 'benefit' ? 'benefit' : null)
-      expect(headers.get('model-id')).toBe(channel === 'benefit' ? 'fixture' : null)
+      expect(headers.get('maas_type')).toBeNull()
       return sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
     })
     const fetcher = createChatFetch(client, accountA, [entry])
     await (await fetcher(CHAT_URL, { method: 'POST', headers: { authorization: 'Bearer sdk-placeholder' }, body: JSON.stringify({ model: entry.id, messages: [{ role: 'system', content: 'You are an AI agent powered by DeepSeek Harness.' }] }) })).text()
     await expect(fetcher('https://example.com/chat/completions', { method: 'POST', body: '{}' })).rejects.toThrow('Unsupported')
+  })
+
+  it('reuses the upstream account session across requests and prepared calls', async () => {
+    const sent: Headers[] = []
+    const client = new CodeArtsClient(async (_input, init) => {
+      sent.push(new Headers(init?.headers))
+      return sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
+    })
+    const request = { method: 'POST', body: JSON.stringify({ model: model.id }) }
+    await (await createChatFetch(client, accountA, [model])(CHAT_URL, request)).text()
+    await (await createChatFetch(client, { ...accountA }, [model])(CHAT_URL, request)).text()
+    await (await createChatFetch(client, accountB, [model])(CHAT_URL, request)).text()
+    for (const headers of sent) {
+      const session = headers.get('x-ot-session-id')
+      expect(session).not.toBeNull()
+      expect(session).toMatch(/^ses_[a-f0-9]{32}$/u)
+      expect(headers.get('user-session-id')).toBe(session)
+      expect(headers.get('authorization')).toContain('user-session-id;x-ot-session-id')
+    }
+    expect(sent[0]!.get('x-ot-session-id')).toBe(sent[1]!.get('x-ot-session-id'))
+    expect(sent[0]!.get('x-ot-session-id')).not.toBe(sent[2]!.get('x-ot-session-id'))
   })
 
   it('propagates abort signals to the upstream request', async () => {

@@ -10,10 +10,7 @@ export function isStatus(value: unknown): value is CodeArtsStatus {
       const account = object(a)
       return account && typeof account['id'] === 'string' && typeof account['label'] === 'string' && typeof account['akHint'] === 'string'
     })
-    && !!object(row['benefit']) && ['agent', 'benefit'].every(channel => {
-      const state = object(catalog?.[channel])
-      return state && Array.isArray(state['models']) && Array.isArray(state['issues'])
-    })
+    && !!catalog && Array.isArray(catalog['models']) && Array.isArray(catalog['issues'])
 }
 
 async function result(response: Response): Promise<unknown> {

@@ -34,7 +34,7 @@ export function parseAction(value: unknown): AccountAction {
     return { action, label, ...(row['id'] === undefined ? {} : { id: String(row['id']) }), ...(row['ak'] === undefined ? {} : { ak: String(row['ak']) }), ...(row['sk'] === undefined ? {} : { sk: String(row['sk']) }) }
   }
   if ((action === 'remove' || action === 'select') && text(row['id'])) return { action, id: String(row['id']) }
-  if ((action === 'refresh' || action === 'claim') && text(row['accountId'])) return { action, accountId: String(row['accountId']) }
+  if (action === 'refresh' && text(row['accountId'])) return { action, accountId: String(row['accountId']) }
   throw new CodeArtsError('Invalid action', 400)
 }
 

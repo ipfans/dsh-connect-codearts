@@ -17,7 +17,6 @@ describe('host control routes', () => {
     const { store } = credentialStore([accountA, accountB])
     const client = new CodeArtsClient(async () => { throw new Error('Unexpected network') })
     vi.spyOn(client, 'models').mockResolvedValue({ models: [], issues: [] })
-    vi.spyOn(client, 'benefit').mockResolvedValue({ balance: 1 })
     runtime = new CodeArtsRuntime(new Accounts(store), client)
     await runtime.sync()
     const routes = createRoutes(runtime)
@@ -66,6 +65,7 @@ describe('host control routes', () => {
     expect((await call(ACTION_PATH, 'POST', body, { 'content-type': 'application/json', 'x-codearts-action-token': 'wrong' })).status).toBe(403)
     const headers = { 'content-type': 'application/json', 'x-codearts-action-token': token }
     expect((await call(ACTION_PATH, 'POST', 'not JSON', headers)).status).toBe(400)
+    expect((await call(ACTION_PATH, 'POST', JSON.stringify({ action: 'claim', accountId: accountA.id }), headers)).status).toBe(400)
     expect((await call(ACTION_PATH, 'POST', JSON.stringify({ action: 'save', label: 'a', sk: 'x'.repeat(20_000) }), headers)).status).toBe(413)
     expect((await runtime.status(token)).accounts).toHaveLength(2)
   })

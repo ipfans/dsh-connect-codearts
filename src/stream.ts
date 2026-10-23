@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import type { Account } from './accounts.ts'
 import { object } from './json.ts'
@@ -104,11 +105,12 @@ export async function normalizeResponse(response: Response, model: CodeArtsModel
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => undefined)
     const error = businessError(data)
-    onFailure?.(new CodeArtsError(redact(error?.message ?? `CodeArts HTTP ${response.status}`, account), response.status, error?.code), response.headers.get('retry-after'))
+    const status = error?.code === 'TM.00001041' ? 429 : response.status
+    onFailure?.(new CodeArtsError(redact(error?.message ?? `CodeArts HTTP ${response.status}`, account), status, error?.code), response.headers.get('retry-after'))
     return new Response(JSON.stringify({ error: {
       message: redact(error?.message ?? `CodeArts HTTP ${response.status}`, account),
       type: 'codearts_error', code: error?.code ?? `http_${response.status}`,
-    } }), { status: response.status, headers: { 'content-type': 'application/json', ...(response.headers.has('retry-after') ? { 'retry-after': response.headers.get('retry-after')! } : {}) } })
+    } }), { status, headers: { 'content-type': 'application/json', ...(response.headers.has('retry-after') ? { 'retry-after': response.headers.get('retry-after')! } : {}) } })
   }
   if ((response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream')) {
     if (!response.body) throw new CodeArtsError('CodeArts returned an empty stream')
@@ -139,6 +141,8 @@ export async function normalizeResponse(response: Response, model: CodeArtsModel
 }
 
 export function createChatFetch(client: CodeArtsClient, account: Account, models: readonly CodeArtsModel[], onFailure?: FailureObserver): typeof fetch {
+  // Huawei limits active session IDs per account, including completed requests.
+  const sessionId = `ses_${createHash('sha256').update(account.ak).digest('hex').slice(0, 32)}`
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.href !== CHAT_URL || init?.method?.toUpperCase() !== 'POST' || typeof init.body !== 'string') throw new CodeArtsError('Unsupported CodeArts chat request', 400)
@@ -147,7 +151,7 @@ export function createChatFetch(client: CodeArtsClient, account: Account, models
     if (!payload || !model) throw new CodeArtsError('This model is not available for the selected account', 404, 'model_not_found')
     payload['model'] = model.upstreamId
     payload['stream'] = true
-    const extra: Record<string, string> = { ...attributionHeaders(), ...(model.channel === 'benefit' ? { maas_type: 'benefit', 'model-id': model.upstreamId, 'model-name': model.upstreamId } : {}) }
+    const extra = { ...attributionHeaders(), 'x-ot-session-id': sessionId, 'user-session-id': sessionId }
     try {
       const response = await client.request(account, 'POST', CHAT_URL, encoder.encode(JSON.stringify(payload)), extra, init.signal ?? undefined, 600_000)
       return await normalizeResponse(response, model, account, onFailure)

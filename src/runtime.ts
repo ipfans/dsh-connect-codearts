@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { Accounts, publicAccounts, type Account, type AccountState } from './accounts.ts'
-import type { AccountAction, BenefitState, CatalogState, Channel, CodeArtsModel, CodeArtsStatus } from './types.ts'
+import type { AccountAction, CatalogState, CodeArtsModel, CodeArtsStatus } from './types.ts'
 import { CodeArtsClient, redact } from './upstream.ts'
 
 export interface ModelSnapshot {
@@ -8,18 +8,15 @@ export interface ModelSnapshot {
   models: readonly CodeArtsModel[]
 }
 
-const CHANNELS = ['agent', 'benefit'] as const
-const emptyCatalog = (): Record<Channel, CatalogState> => ({ agent: { models: [], issues: [] }, benefit: { models: [], issues: [] } })
+const emptyCatalog = (): CatalogState => ({ models: [], issues: [] })
 const identity = (account: Account): string => createHash('sha256').update(JSON.stringify([account.id, account.ak, account.sk])).digest('hex')
 
 export class CodeArtsRuntime {
   private state: AccountState = { version: 1, accounts: [], activeId: null }
   private currentIdentity: string | undefined
   private currentCatalog = emptyCatalog()
-  private currentBenefit: BenefitState = {}
   private currentSnapshot: ModelSnapshot = { account: undefined, models: [] }
   private readonly catalogs = new Map<string, CatalogState>()
-  private readonly benefits = new Map<string, { value: BenefitState; at: number }>()
   private readonly inflight = new Map<string, Promise<void>>()
   private readonly listeners = new Set<() => void>()
   private readonly controller = new AbortController()
@@ -36,7 +33,7 @@ export class CodeArtsRuntime {
   }
 
   private publish(): void {
-    this.currentSnapshot = { account: this.currentSnapshot.account, models: CHANNELS.flatMap(c => this.currentCatalog[c].models) }
+    this.currentSnapshot = { account: this.currentSnapshot.account, models: this.currentCatalog.models }
     for (const listener of this.listeners) listener()
   }
 
@@ -49,7 +46,6 @@ export class CodeArtsRuntime {
         this.currentIdentity = undefined
         this.currentSnapshot = { account: undefined, models: [] }
         this.currentCatalog = emptyCatalog()
-        this.currentBenefit = {}
         this.publish()
       }
       throw error
@@ -61,9 +57,7 @@ export class CodeArtsRuntime {
     if (key === this.currentIdentity) return
     this.currentIdentity = key
     this.currentSnapshot = { account, models: [] }
-    this.currentCatalog = emptyCatalog()
-    this.currentBenefit = key === undefined ? {} : this.benefits.get(key)?.value ?? {}
-    if (key) for (const channel of CHANNELS) this.currentCatalog[channel] = this.catalogs.get(`${key}/${channel}`) ?? { models: [], issues: [] }
+    this.currentCatalog = key === undefined ? emptyCatalog() : this.catalogs.get(key) ?? emptyCatalog()
     this.publish()
   }
 
@@ -81,31 +75,20 @@ export class CodeArtsRuntime {
     if (expectedAccount !== undefined && account?.id !== expectedAccount) throw new Error('The selected account changed; refresh this page and try again')
     if (!account) return
     const key = identity(account)
-    await Promise.all([
-      ...CHANNELS.map(channel => this.join(`${key}/${channel}`, async () => {
-        const cacheKey = `${key}/${channel}`
-        const previous = this.catalogs.get(cacheKey)
-        if (!force && previous?.fetchedAt !== undefined && this.now() - previous.fetchedAt < 300_000) return
-        let value: CatalogState
-        try {
-          const result = await this.client.models(account, channel, this.controller.signal)
-          value = { ...result, fetchedAt: this.now() }
-        } catch (error) {
-          value = { models: previous?.models ?? [], issues: previous?.issues ?? [], ...(previous?.fetchedAt === undefined ? {} : { fetchedAt: previous.fetchedAt }), error: redact(error instanceof Error ? error.message : 'Model discovery failed', account) }
-        }
-        if (this.closed) return
-        this.catalogs.set(cacheKey, value)
-        if (key === this.currentIdentity) { this.currentCatalog = { ...this.currentCatalog, [channel]: value }; this.publish() }
-      })),
-      this.join(`${key}/balance`, async () => {
-        const previous = this.benefits.get(key)
-        if (!force && previous && this.now() - previous.at < 60_000) return
-        const value = await this.client.benefit(account, this.controller.signal).catch(error => ({ error: redact(error instanceof Error ? error.message : 'Balance query failed', account) }))
-        if (this.closed) return
-        this.benefits.set(key, { value, at: this.now() })
-        if (key === this.currentIdentity) this.currentBenefit = value
-      }),
-    ])
+    await this.join(key, async () => {
+      const previous = this.catalogs.get(key)
+      if (!force && previous?.fetchedAt !== undefined && this.now() - previous.fetchedAt < 300_000) return
+      let value: CatalogState
+      try {
+        const result = await this.client.models(account, this.controller.signal)
+        value = { ...result, fetchedAt: this.now() }
+      } catch (error) {
+        value = { models: previous?.models ?? [], issues: previous?.issues ?? [], ...(previous?.fetchedAt === undefined ? {} : { fetchedAt: previous.fetchedAt }), error: redact(error instanceof Error ? error.message : 'Model discovery failed', account) }
+      }
+      if (this.closed) return
+      this.catalogs.set(key, value)
+      if (key === this.currentIdentity) { this.currentCatalog = value; this.publish() }
+    })
   }
 
   async action(action: AccountAction): Promise<void> {
@@ -119,20 +102,6 @@ export class CodeArtsRuntime {
         await this.refresh(true, action.accountId)
         return
       }
-      case 'claim': {
-        await this.sync()
-        const account = this.currentSnapshot.account
-        if (!account || account.id !== action.accountId) throw new Error('The selected account changed; refresh this page and try again')
-        const key = identity(account)
-        // Join a simultaneous balance query before invalidating it after a successful claim.
-        await this.join(`${key}/claim`, async () => {
-          await this.client.claim(account, this.controller.signal)
-          await this.inflight.get(`${key}/balance`)
-          this.benefits.delete(key)
-          if (key === this.currentIdentity) await this.refresh(false, account.id)
-        })
-        return
-      }
     }
     await this.sync()
     await this.refresh()
@@ -142,7 +111,7 @@ export class CodeArtsRuntime {
     await this.sync()
     return {
       accounts: publicAccounts(this.state), activeId: this.state.activeId,
-      catalog: this.currentCatalog, benefit: this.currentBenefit, actionToken,
+      catalog: this.currentCatalog, actionToken,
     }
   }
 
@@ -151,7 +120,6 @@ export class CodeArtsRuntime {
     this.controller.abort(new Error('CodeArts plugin stopped'))
     this.listeners.clear()
     this.catalogs.clear()
-    this.benefits.clear()
     this.state = { version: 1, accounts: [], activeId: null }
     this.currentSnapshot = { account: undefined, models: [] }
   }

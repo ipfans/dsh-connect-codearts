@@ -1,10 +1,9 @@
 import type { Account } from './accounts.ts'
 import { object, positive, text } from './json.ts'
 import { signRequest } from './signing.ts'
-import type { BenefitState, Channel, CodeArtsModel } from './types.ts'
+import type { CodeArtsModel } from './types.ts'
 
 export const SNAP_BASE = 'https://snap-access.cn-north-4.myhuaweicloud.com'
-export const BENEFIT_BASE = 'https://opengw.developer.huaweicloud.com'
 export const CHAT_URL = `${SNAP_BASE}/api/v2/chat/completions`
 
 export class CodeArtsError extends Error {
@@ -39,7 +38,7 @@ export function businessError(value: unknown): { message: string; code: string }
 
 export function businessStatus(message: string): number {
   if (/quota|insufficient.*token|token.*exhaust|余额|额度/iu.test(message)) return 402
-  if (/rate.limit|concurren|限流|并发/iu.test(message)) return 429
+  if (/rate.limit|tpm.limit|concurren|限流|并发/iu.test(message)) return 429
   if (/signature|unauthorized|authentication|access.?key|签名|认证/iu.test(message)) return 401
   if (/permission|forbidden|权限/iu.test(message)) return 403
   return 502
@@ -50,7 +49,7 @@ export interface DiscoveredModels {
   issues: string[]
 }
 
-export function parseModels(rows: unknown[], channel: Channel): DiscoveredModels {
+export function parseModels(rows: unknown[]): DiscoveredModels {
   const models: CodeArtsModel[] = []
   const issues: string[] = []
   for (const value of rows) {
@@ -60,7 +59,7 @@ export function parseModels(rows: unknown[], channel: Channel): DiscoveredModels
       issues.push('A model was skipped because its ID is missing or invalid')
       continue
     }
-    const params = channel === 'agent' ? object(row['model_parameters']) : row
+    const params = object(row['model_parameters'])
     const contextWindow = params?.['context_window']
     const maxTokens = params?.['max_tokens']
     if (!positive(contextWindow) || !positive(maxTokens)) {
@@ -69,7 +68,7 @@ export function parseModels(rows: unknown[], channel: Channel): DiscoveredModels
     }
     if (models.some(m => m.upstreamId === id)) continue
     models.push({
-      id: `${channel}/${id}`, upstreamId: id, channel,
+      id: `agent/${id}`, upstreamId: id,
       name: text(row['model_alias']) ?? text(row['model_name']) ?? id,
       contextWindow, maxTokens: Math.min(maxTokens, contextWindow),
       supportsImages: params?.['supports_images'] === true,
@@ -83,7 +82,7 @@ export class CodeArtsClient {
 
   async request(account: Account, method: string, target: string, body = new Uint8Array(), extra: Record<string, string> = {}, signal?: AbortSignal, timeoutMs = 30_000): Promise<Response> {
     const url = new URL(target)
-    if (![SNAP_BASE, BENEFIT_BASE].includes(url.origin) || url.username || url.password) throw new CodeArtsError('CodeArts request destination is not allowed', 400)
+    if (url.origin !== SNAP_BASE || url.username || url.password) throw new CodeArtsError('CodeArts request destination is not allowed', 400)
     const headers = signRequest(account, method, url, body, extra)
     const deadline = AbortSignal.timeout(timeoutMs)
     const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
@@ -113,13 +112,7 @@ export class CodeArtsClient {
     return result
   }
 
-  async models(account: Account, channel: Channel, signal?: AbortSignal): Promise<DiscoveredModels> {
-    if (channel === 'benefit') {
-      const data = await this.json(account, 'GET', `${BENEFIT_BASE}/api/v1/gateway/config`, {}, signal)
-      const rows = object(data['result'])?.['models']
-      if (!Array.isArray(rows)) throw new CodeArtsError('CodeArts benefit model list is missing')
-      return parseModels(rows, channel)
-    }
+  async models(account: Account, signal?: AbortSignal): Promise<DiscoveredModels> {
     const headers = { 'agent-type': 'AgentCenter', 'x-language': 'zh-cn', accept: 'application/json' }
     const data = await this.json(account, 'GET', `${SNAP_BASE}/v1/agent-center/agents/useragents?offset=0&limit=100`, headers, signal)
     if (!Array.isArray(data['agents'])) throw new CodeArtsError('CodeArts AgentCenter list is missing')
@@ -134,7 +127,7 @@ export class CodeArtsClient {
         const detail = await this.json(account, 'GET', `${SNAP_BASE}/v1/agent-center/agents/detail?agent_id=${encodeURIComponent(id)}`, headers, signal)
         const rows = object(detail['gpts'])?.['models']
         if (!Array.isArray(rows)) continue
-        const parsed = parseModels(rows, channel)
+        const parsed = parseModels(rows)
         issues.push(...parsed.issues)
         if (parsed.models.length) return { models: parsed.models, issues }
       } catch (error) {
@@ -144,32 +137,5 @@ export class CodeArtsClient {
     }
     if (lastError) throw lastError
     return { models: [], issues }
-  }
-
-  async benefit(account: Account, signal?: AbortSignal): Promise<BenefitState> {
-    const [balance, claim] = await Promise.allSettled([
-      this.json(account, 'GET', `${BENEFIT_BASE}/api/v1/user/tokens/balance`, {}, signal),
-      this.json(account, 'GET', `${BENEFIT_BASE}/api/v1/benefit/claim`, {}, signal),
-    ])
-    const result: BenefitState = {}
-    const errors: string[] = []
-    if (balance.status === 'fulfilled') {
-      const values = object(balance.value['result'])
-      for (const [source, target] of [['total_quota', 'total'], ['total_balance', 'balance'], ['used_amount', 'used']] as const) {
-        const value = values?.[source]
-        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) result[target] = value
-      }
-      if (result.balance === undefined) errors.push('CodeArts balance response is missing total_balance')
-    } else errors.push(redact(String(balance.reason instanceof Error ? balance.reason.message : 'Balance query failed'), account))
-    if (claim.status === 'fulfilled') {
-      const value = object(claim.value['result'])?.['create_time']
-      if (typeof value === 'number' && Number.isFinite(value) && value > 0) result.claimedAt = value
-    } else errors.push(redact(String(claim.reason instanceof Error ? claim.reason.message : 'Check-in status query failed'), account))
-    if (errors.length) result.error = errors.join('; ')
-    return result
-  }
-
-  async claim(account: Account, signal?: AbortSignal): Promise<void> {
-    await this.json(account, 'POST', `${BENEFIT_BASE}/api/v1/benefit/claim`, {}, signal)
   }
 }

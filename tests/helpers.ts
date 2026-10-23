@@ -4,7 +4,7 @@ import type { CodeArtsModel } from '../src/types.ts'
 
 export const accountA: Account = { id: 'account-a', label: 'Account A', ak: 'FAKEACCESSKEYA1234', sk: 'fake-secret-key-a-not-valid' }
 export const accountB: Account = { id: 'account-b', label: 'Account B', ak: 'FAKEACCESSKEYB5678', sk: 'fake-secret-key-b-not-valid' }
-export const model: CodeArtsModel = { id: 'benefit/fixture', upstreamId: 'fixture', channel: 'benefit', name: 'Fixture', contextWindow: 32768, maxTokens: 4096, supportsImages: false }
+export const model: CodeArtsModel = { id: 'agent/fixture', upstreamId: 'fixture', name: 'Fixture', contextWindow: 32768, maxTokens: 4096, supportsImages: false }
 
 export function credentialStore(accounts: Account[] = [], activeId: string | null = accounts[0]?.id ?? null) {
   let record: CredentialRecord | undefined = { kind: 'grant', payload: { version: 1, accounts: structuredClone(accounts), activeId } }
