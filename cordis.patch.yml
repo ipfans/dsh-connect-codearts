@@ -1,0 +1,3 @@
+- insert:
+    - id: llm-codearts
+      name: dsh-connect-codearts

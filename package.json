@@ -1,0 +1,74 @@
+{
+  "name": "dsh-connect-codearts",
+  "displayName": "DSH CodeArts Connect",
+  "version": "0.1.0",
+  "description": "Connect Huawei Cloud CodeArts subscription and benefit models to DeepSeek Harness.",
+  "author": "ipfans",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "packageManager": "pnpm@12.14.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "icon": "./icon.svg",
+  "keywords": ["dsh-plugin", "deepseek-harness", "codearts", "model-provider"],
+  "exports": {
+    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "locale", "cordis.patch.yml", "icon.svg", "README.md", "LICENSE", "NOTICE"],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check": "pnpm run build && pnpm run typecheck && pnpm run test",
+    "test:engine": "node scripts/verify-engine-load.mjs",
+    "prepack": "pnpm run build"
+  },
+  "repository": { "type": "git", "url": "git+https://github.com/ipfans/dsh-connect-codearts.git" },
+  "homepage": "https://github.com/ipfans/dsh-connect-codearts#readme",
+  "bugs": "https://github.com/ipfans/dsh-connect-codearts/issues",
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "inject": ["@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-locale"],
+      "platform": "web"
+    }
+  },
+  "dependencies": { "@earendil-works/pi-ai": "1.1.0" },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "~3.18.5",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "~3.18.5",
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "@types/react-test-renderer": "^18.3.1",
+    "react": "18.3.1",
+    "react-test-renderer": "18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
+  }
+}

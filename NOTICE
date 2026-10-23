@@ -1,0 +1,21 @@
+dsh-connect-codearts
+Copyright (c) 2026 ipfans
+
+The provider assembly, DSH plugin packaging, browser module registration and
+settings integration are adapted from:
+  dsh-workbuddy-connect-functy
+  https://github.com/functy23/dsh-workbuddy-connect-functy
+  Reference commit: a13f54e34d357024801ea36963d1ba5c87923ca1
+  Copyright (c) 2026 Corrine Hu and Functy
+  MIT License (included in LICENSE)
+
+The CodeArts endpoint discovery, SDK-HMAC-SHA256 usage, benefit routing and
+response compatibility behavior are informed by:
+  codearts2api
+  https://github.com/Johnsheng1/codearts2api
+  Reference commit: d813ca0456f23cd73bb3bbee16627bc2a40036f9
+  Copyright (c) 2026 JohnSheng
+  MIT License (included in LICENSE)
+
+Dependencies retain their own licenses. This plugin is an independent community
+project and is not affiliated with Huawei Cloud or DeepSeek.
